@@ -1,0 +1,58 @@
+service: point-system
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: python3.9
+  region: ap-northeast-1
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action: 'dynamodb:*'
+          Resource: 'arn:aws:dynamodb:ap-northeast-1:*:table/points'
+        - Effect: Allow
+          Action: 'sqs:*'
+          Resource: 'arn:aws:sqs:ap-northeast-1:*:pointUpdateQueue.fifo'
+
+resources:
+  Resources:
+    PointsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: points
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+    PointUpdateQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: pointUpdateQueue.fifo
+        FifoQueue: true
+        ContentBasedDeduplication: true 
+
+functions:
+  addPoints:
+    handler: handler.addPoints
+    runtime: python3.9
+    events:
+      - http:
+          path: addPoints
+          method: POST
+
+  processPointsUpdate:
+    handler: handler.processPointsUpdate
+    runtime: python3.9
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - PointUpdateQueue
+              - Arn
